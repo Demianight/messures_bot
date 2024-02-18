@@ -1,15 +1,15 @@
 from aiogram import F, Router
 from aiogram.types import Message
 
+from answers import MISSED_ANS
+from markups import start_markup
 
 router = Router()
 
 
-@router.message(F.text == 'special_text')
-async def special_text(message: Message):
-    await message.reply('special_text')
-
-
 @router.message(F.text)
 async def root(message: Message):
-    await message.reply('text')
+    await message.reply(
+        MISSED_ANS,
+        reply_markup=start_markup()
+    )

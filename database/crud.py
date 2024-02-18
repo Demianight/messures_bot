@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from sqlmodel import Session, select
-from database.config import engine
 
+from sqlmodel import Session, select
+
+from database.config import engine
 from database.models import Measure, User
 
 

@@ -1,14 +1,18 @@
 import asyncio
 from os import getenv
-from database.config import create_db
-from dotenv import load_dotenv
+from pathlib import Path
+from typing import NoReturn
 
 from aiogram import Bot, Dispatcher
+from dotenv import load_dotenv
 
-from routers import commands, messages, measure_create, measure_show
+from database.config import create_db
+from routers import commands, measure_create, measure_show, messages
+
+GRAPHS_FOLDER = Path('graphs')
 
 
-async def main() -> None:
+async def main() -> NoReturn:
 
     create_db()
 

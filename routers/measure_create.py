@@ -1,14 +1,20 @@
 from datetime import datetime
+
 from aiogram import F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
+
+from answers import (CONGRATS_ANS, DATE_CHOICE_ANS, DATE_DAY_ANS,
+                     DATE_FAILURE_ANS, DATE_HOUR_ANS, DATE_MINUTES_ANS,
+                     DATE_MONTH_ANS, DATE_YEAR_ANS, FAILURE_ANS,
+                     INPUT_FAILURE_ANS, MEASURE_INPUT_ANS)
+from database.crud import create_measure, create_user
 from database.models import Measure, User
 from handlers.date import normalize_date
-
-from keyboards.markups import date_markup
-from database.crud import create_measure, create_user
+from markups import date_markup, start_markup
+from regexes import EMAIL_REGEX, MEASURE_REGEX
 
 router = Router()
 
@@ -16,12 +22,17 @@ router = Router()
 class NewMeasure(StatesGroup):
     measure = State()
     date = State()
+    hour = State()
+    minutes = State()
+    day = State()
+    month = State()
+    year = State()
 
 
 @router.message(StateFilter(None), Command('new'))
 async def retrieve_mesurement(message: Message, state: FSMContext):
     if not message.from_user:
-        await message.reply('Что то пошло не так')
+        await message.reply(FAILURE_ANS)
         return
 
     user = User(tg_id=message.from_user.id)
@@ -29,27 +40,21 @@ async def retrieve_mesurement(message: Message, state: FSMContext):
     create_user(user)
 
     await message.reply(
-        'Введите последние измерения.\n'
-        'Обязательно соблюдайте формат: X Y\n'
-        'Например: 120 80'
+        MEASURE_INPUT_ANS
     )
     await state.set_state(NewMeasure.measure)
 
 
 @router.message(
     NewMeasure.measure,
-    F.text.regexp(r'\b\d{1,3}\s\d{1,3}\b')
+    F.text.regexp(MEASURE_REGEX)
 )
 async def retrieve_measure(message: Message, state: FSMContext):
 
     await state.update_data(measure=message.text)
 
     await message.answer(
-        'Супер! Теперь дату измерения.\n'
-        'Чтобы выбрать текущую дату можно написать "Сейчас" или нажать на '
-        'кнопку клавиатуры бота.\n'
-        'Чтобы ввести свою дату укажите ее в формате: чч:мм дд мм гггг\n'
-        'Например: 10:30 10 02 2024 (десятое февраля 2024 года в 10:30)\n',
+        DATE_CHOICE_ANS,
         reply_markup=date_markup()
     )
     await state.set_state(NewMeasure.date)
@@ -60,9 +65,108 @@ async def retrieve_measure(message: Message, state: FSMContext):
 )
 async def retrieve_measure_failure(message: Message, state: FSMContext):
     await message.answer(
-        'Все таки формат не совпал, проверьте пробелы '
-        'и подобные "незаметные" вещи'
+        DATE_FAILURE_ANS
     )
+
+
+'''Custom date.'''
+
+
+@router.message(NewMeasure.date, F.text == 'Вручную')
+async def trigger_custom_date(message: Message, state: FSMContext):
+    await state.set_state(NewMeasure.hour)
+    await message.answer(DATE_HOUR_ANS)
+
+
+@router.message(NewMeasure.hour)
+async def retrieve_hour(message: Message, state: FSMContext):
+    text = message.text
+    if not text or len(text) != 2 or not text.isdigit():
+        await message.reply(INPUT_FAILURE_ANS)
+        return
+
+    await state.update_data(hour=int(text))
+
+    await state.set_state(NewMeasure.minutes)
+    await message.answer(DATE_MINUTES_ANS)
+
+
+@router.message(NewMeasure.minutes)
+async def retrieve_minutes(message: Message, state: FSMContext):
+    text = message.text
+    if not text or len(text) != 2 or not text.isdigit():
+        await message.reply(INPUT_FAILURE_ANS)
+        return
+
+    await state.update_data(minutes=int(text))
+
+    await state.set_state(NewMeasure.day)
+    await message.answer(DATE_DAY_ANS)
+
+
+@router.message(NewMeasure.day)
+async def retrieve_day(message: Message, state: FSMContext):
+    text = message.text
+    if not text or len(text) != 2 or not text.isdigit():
+        await message.reply(INPUT_FAILURE_ANS)
+        return
+
+    await state.update_data(day=int(text))
+
+    await state.set_state(NewMeasure.month)
+    await message.answer(DATE_MONTH_ANS)
+
+
+@router.message(NewMeasure.month)
+async def retrieve_month(message: Message, state: FSMContext):
+    text = message.text
+    if not text or len(text) != 2 or not text.isdigit():
+        await message.reply(INPUT_FAILURE_ANS)
+        return
+
+    await state.update_data(month=int(text))
+
+    await state.set_state(NewMeasure.year)
+    await message.answer(DATE_YEAR_ANS)
+
+
+@router.message(NewMeasure.year)
+async def retrieve_year(message: Message, state: FSMContext):
+    text = message.text
+    if not text or len(text) != 4 or not text.isdigit():
+        await message.reply(INPUT_FAILURE_ANS)
+        return
+
+    await state.update_data(year=int(text))
+
+    data = await state.get_data()
+    date = datetime(
+        year=data['year'],
+        month=data['month'],
+        day=data['day'],
+        hour=data['hour'],
+        minute=data['minutes']
+    )
+
+    await state.update_data(date=date)
+    data = await state.get_data()
+
+    await state.clear()
+
+    if not message.from_user:
+        await message.reply(INPUT_FAILURE_ANS)
+        return
+
+    measure = Measure(**data, user_id=message.from_user.id)
+    create_measure(measure)
+
+    await message.reply(
+        CONGRATS_ANS,
+        reply_markup=start_markup()
+    )
+
+
+'''Date.'''
 
 
 @router.message(NewMeasure.date, F.text == 'Сейчас')
@@ -72,19 +176,20 @@ async def retrieve_date_now(message: Message, state: FSMContext):
     await state.clear()
 
     if not message.from_user:
-        await message.reply('Что то пошло не так')
+        await message.reply(FAILURE_ANS)
         return
 
     measure = Measure(**data, user_id=message.from_user.id)
     create_measure(measure)
 
-    await message.reply('Отлично! Все сохранилось')
+    await message.reply(
+        CONGRATS_ANS,
+        reply_markup=start_markup()
+    )
 
 
 @router.message(
-    NewMeasure.date, F.text.regexp(
-        r'\b(?:[01]\d|2[0-3]):(?:[0-5]\d)\s(?:0[1-9]|[12]\d|3[01])\s(?:0[1-9]|1[0-2])\s\d{4}\b'
-    )
+    NewMeasure.date, F.text.regexp(EMAIL_REGEX)
 )
 async def retrieve_date_custom(message: Message, state: FSMContext):
     await state.update_data(date=normalize_date(message.text or ''))
@@ -92,18 +197,21 @@ async def retrieve_date_custom(message: Message, state: FSMContext):
     await state.clear()
 
     if not message.from_user:
-        await message.reply('Что то пошло не так')
+        await message.reply(FAILURE_ANS)
         return
 
     measure = Measure(**data, user_id=message.from_user.id)
     create_measure(measure)
 
-    await message.reply('Отлично! Все сохранилось')
+    await message.reply(
+        CONGRATS_ANS,
+        reply_markup=start_markup()
+    )
 
 
 @router.message(NewMeasure.date)
 async def retrieve_date_failure(message: Message, state: FSMContext):
     await message.answer(
-        'Попробуй еще раз, по-моему что то не совпало',
+        DATE_FAILURE_ANS,
         reply_markup=date_markup()
     )

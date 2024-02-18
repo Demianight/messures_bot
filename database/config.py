@@ -1,6 +1,5 @@
 from sqlmodel import SQLModel, create_engine
 
-
 SQLALCHEMY_DATABASE_URL = "sqlite:///./db.sqlite3"
 
 engine = create_engine(

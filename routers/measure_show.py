@@ -2,8 +2,8 @@ from aiogram import Router
 from aiogram.filters import Command, StateFilter
 from aiogram.types import Message
 
-from database.crud import get_measures, _get_measures
-from handlers.graph import create_graph
+from database.crud import _get_measures, get_measures
+from handlers.graph import create_graph, upload_graph
 
 router = Router()
 
@@ -25,4 +25,12 @@ async def retrieve_mesurement(message: Message):
         await message.reply('Что то пошло не так')
         return
 
-    create_graph(_get_measures(message.from_user.id))
+    name = create_graph(
+        _get_measures(
+            message.from_user.id
+        ), message.from_user.id
+    )
+
+    graph = upload_graph(name)
+
+    await message.answer_photo(graph)
